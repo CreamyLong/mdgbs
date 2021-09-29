@@ -2,7 +2,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem import ChemicalFeatures
 from rdkit import RDConfig
-from rdkit.Chem.Draw import IPythonConsole #Needed to show molecules
+from rdkit.Chem.Draw import IPythonConsole # Needed to show molecules
 from strawberryfields.apps import data, plot, sample, clique
 
 import os
@@ -11,7 +11,7 @@ import networkx as nx
 import plotly
 import random
 from itertools import combinations, permutations
-from matrix_utils import check_point_vaild, make_Abbrev_list, make_complete_weight_matrix
+from matrix_utils import check_point_vaild, make_Abbrev_list, make_complete_dis_matrix,find_letter
 import itertools
 
 fdefName = os.path.join(RDConfig.RDDataDir, 'BaseFeatures.fdef')
@@ -51,7 +51,7 @@ def get_feats(mol):
   feats = Donor_feat + Acceptor_feat + NegIonizable_feat + PosIonizable_feat + Aromatic_feat + LumpedHydrophobe_feat
   return feats
 
-def make_weight_matrix(feats):
+def make_dis_matrix(feats):
   init_matrix = np.zeros((len(feats), len(feats)))
   pharmacophore_list = []
 
@@ -68,7 +68,7 @@ def make_weight_matrix(feats):
   return processed_weight_matrix, pharmacophore_list
 
 
-def make_binding_interaction_graph(protein_complete_weight_matrix, ligand_complete_weight_matrix):
+def make_binding_interaction_graph(protein_complete_weight_matrix, ligand_complete_weight_matrix,verbose=1):
 
   link_list = []
 
@@ -92,15 +92,15 @@ def make_binding_interaction_graph(protein_complete_weight_matrix, ligand_comple
       else:
         continue
 
-  """筛选逻辑"""
-  print("link_list", link_list)
-  link_uni_list2 = list(itertools.chain.from_iterable(link_list))
-  print("link_uni_list2", link_uni_list2)
-
-  link_count_dict = {}
-  for i in link_uni_list2:
-    count = link_uni_list2.count(i)
-    link_count_dict[i] = count
+  # """筛选逻辑"""
+  # print("link_list", link_list)
+  # link_uni_list2 = list(itertools.chain.from_iterable(link_list))
+  # print("link_uni_list2", link_uni_list2)
+  #
+  # link_count_dict = {}
+  # for i in link_uni_list2:
+  #   count = link_uni_list2.count(i)
+  #   link_count_dict[i] = count
 
   # top_link_list = sorted(link_count_dict, key=lambda i: i[1]) #add找到度大的节点
   # print("top_link_list", top_link_list)
@@ -125,11 +125,18 @@ def make_binding_interaction_graph(protein_complete_weight_matrix, ligand_comple
   # print("random")
   # print(random.sample(link_uni_list, 6))  # 结果['a', 'd', 'b', 'f', 'c']，每次运行结果不同。
   # link_uni_list = random.sample(link_uni_list, 5)
-  binding_interaction_graph = np.zeros((len(link_uni_list), len(link_uni_list)))
-  # binding_interaction_graph = np.zeros(6, 6)
+  binding_interaction_adj_graph = np.zeros((len(link_uni_list), len(link_uni_list)))
+  binding_interaction_adj_weight_graph = np.zeros((len(link_uni_list), len(link_uni_list)))
 
+  # binding_interaction_graph = np.zeros(6, 6)
+  print("link_uni_list", link_uni_list)
   print("最终图一共有%s个节点" % len(link_uni_list))
   coordinate = {}
+  vertex_weignt ={}
+  import pickle
+
+  pkl_file = open('contact_potential_function.pkl', 'rb')
+  contact_potential = pickle.load(pkl_file)
 
   for i in range(len(link_uni_list)):
     for j in range(len(link_uni_list)):
@@ -142,20 +149,21 @@ def make_binding_interaction_graph(protein_complete_weight_matrix, ligand_comple
       temp_list2.append(link_uni_list[i])
       temp_list2.append(link_uni_list[j])
 
+      p1, p2 = link_uni_list[i]
+      vertex_weignt[i] = contact_potential[find_letter(p1).upper(), find_letter(p2).upper()]
       if temp_list in link_list or temp_list2 in link_list:
-        binding_interaction_graph[i][j] = 1
-        binding_interaction_graph[j][i] = 1
+        binding_interaction_adj_graph[i][j] = 1
+        binding_interaction_adj_graph[j][i] = 1
 
         coordinate[(i, j)] = [link_uni_list[i], link_uni_list[j]]
         coordinate[(j, i)] = [link_uni_list[j], link_uni_list[i]]
 
-        # print(link_uni_list[i], link_uni_list[j])
-
-  print(np.where(binding_interaction_graph == 1))
-
+  # print(np.where(binding_interaction_graph == 1))
   print("coordinate", coordinate)
+  print("vertex_weignt", vertex_weignt)
+  print(binding_interaction_adj_weight_graph)
 
-  return binding_interaction_graph, link_uni_list, coordinate
+  return binding_interaction_adj_graph, binding_interaction_adj_weight_graph, link_uni_list, coordinate
 
 
 if __name__ == '__main__':
@@ -170,40 +178,40 @@ if __name__ == '__main__':
   r_feats = get_feats(receptor)   #r represents receptor
 
   print("ligand's pharmacophore %s points" % len(l_feats))
-  print("ligand's pharmacophore %s points name: ", [i.GetFamily() for i in l_feats])
-
+  # print("ligand's pharmacophore %s points name: ", [i.GetFamily() for i in l_feats])
   print("receptor's pharmacophore %s points" % len(r_feats))
+
   # for i in r_feats:
   #   print(i.GetFamily())
-
-  processed_l_weight_matrix, l_pharmacophore_list = make_weight_matrix(l_feats)
-  processed_r_weight_matrix, r_pharmacophore_list = make_weight_matrix(r_feats)
-
+  processed_l_dis_matrix, l_pharmacophore_list = make_dis_matrix(l_feats)
+  processed_r_dis_matrix, r_pharmacophore_list = make_dis_matrix(r_feats)
+  print("processed_l_dis_matrix", processed_l_dis_matrix) # the distance of two pharmacophores in ligand
 
   l_pharmacophore_Abbrev_list = make_Abbrev_list(l_pharmacophore_list, moltype="ligand")
   r_pharmacophore_Abbrev_list = make_Abbrev_list(r_pharmacophore_list, moltype="receptor")
 
-  ligand_complete_weight_matrix = make_complete_weight_matrix(l_pharmacophore_Abbrev_list, processed_l_weight_matrix)
-  receptor_complete_weight_matrix = make_complete_weight_matrix(r_pharmacophore_Abbrev_list, processed_r_weight_matrix)
+  ligand_complete_dis_matrix = make_complete_dis_matrix(l_pharmacophore_Abbrev_list, processed_l_dis_matrix)
+  receptor_complete_dis_matrix = make_complete_dis_matrix(r_pharmacophore_Abbrev_list, processed_r_dis_matrix)
+  print("ligand_complete_dis_matrix", ligand_complete_dis_matrix)
+
 
   # print(ligand_complete_weight_matrix, receptor_complete_weight_matrix)
-  binding_interaction_graph, link_uni_list, coordinate = make_binding_interaction_graph(ligand_complete_weight_matrix, receptor_complete_weight_matrix) #最终的图， 横轴每个坐标名称
+  binding_interaction_adj_graph, binding_interaction_adj_weight_graph, link_uni_list, coordinate = make_binding_interaction_graph(ligand_complete_dis_matrix, receptor_complete_dis_matrix) #最终的图， 横轴每个坐标名称
 
-  print(binding_interaction_graph.shape, len(link_uni_list))
+  print(binding_interaction_adj_graph.shape, len(link_uni_list))
   print("link_uni_list", link_uni_list)
 
 
-  print("binding_interaction_graph", binding_interaction_graph)
+  print("binding_interaction_graph", binding_interaction_adj_graph)
   print("coordinate", coordinate)
 
-  np.save("result/3rsx.npy", binding_interaction_graph)
+  np.save("result/3rsx.npy", binding_interaction_adj_graph)
 
-  # TA_graph = nx.Graph(binding_interaction_graph)
-  # # print(plot.graph(TA_graph))
+  print("===Searching Maximum weighted clique===")
 
-  BI = binding_interaction_graph
-  BI_graph = nx.Graph(binding_interaction_graph)
-  postselected = sample.postselect(list(BI), 2, 10)  # Post-select samples
+  BI = binding_interaction_adj_graph
+  BI_graph = nx.Graph(binding_interaction_adj_graph)
+  postselected = sample.postselect(list(BI), 2, 10)  # Post-select samples by imposing a minimum and maximum number of photons or clicks.
   samples = sample.to_subgraphs(postselected, BI_graph)  # Convert samples into subgraphs
   shrunk = [clique.shrink(s, BI_graph) for s in samples]  # Shrink subgraphs to cliques
   searched = [clique.search(s, BI_graph, 10) for s in shrunk]  # Perform local search
@@ -211,7 +219,6 @@ if __name__ == '__main__':
   print("searched ", searched)
   largest_clique = searched[np.argmax(clique_sizes)]  # Identify largest clique found
   print("Largest clique found is = ", largest_clique)
-
   print("binding sites are")
   for i in list(combinations(largest_clique, 2)):
     print(coordinate[i])

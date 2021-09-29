@@ -36,8 +36,9 @@ def check_point_vaild(pair):
     else:
         return 0
 
-def make_complete_weight_matrix(pharmacophore_Abbrev_list, processed_matrix):
+def make_complete_dis_matrix(pharmacophore_Abbrev_list, processed_matrix):
   from collections import defaultdict
+
   make_complete_weight_matrix = defaultdict(tuple)
   length = processed_matrix.shape[0]
   for i in range(length):
